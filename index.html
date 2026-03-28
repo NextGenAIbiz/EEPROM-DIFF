@@ -185,6 +185,10 @@
     tbody tr:hover { background: var(--row-hover); }
     tbody td { padding: 9px 14px; vertical-align: middle; }
     .col-name { font-weight: 600; font-family: 'Consolas', monospace; font-size: 12px; }
+    .col-comp     { font-size: 12px; color: #a5b4fc; white-space: nowrap; }
+    .col-sessions { font-size: 11px; color: #67e8f9; max-width: 200px; }
+    .col-org      { font-family: monospace; font-size: 11px; color: #fbbf24; white-space: nowrap;
+                     max-width: 200px; overflow: hidden; text-overflow: ellipsis; cursor: help; }
     .col-ident { font-family: monospace; color: var(--muted); }
     .col-len   { font-family: monospace; }
     .col-fmt   { font-family: monospace; font-size: 11px; color: #94a3b8; }
@@ -214,6 +218,51 @@
     }
     #empty-state .big { font-size: 48px; margin-bottom: 12px; }
     #empty-state p { font-size: 14px; }
+
+    /* ── Column filter dropdown ── */
+    .col-filter-btn {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 11px; padding: 0 3px;
+      border-radius: 3px; margin-left: 3px; line-height: 1;
+      vertical-align: middle; transition: color .15s, background .15s;
+    }
+    .col-filter-btn:hover { color: var(--accent); background: rgba(79,142,247,.12); }
+    .col-filter-btn.active { color: var(--accent); font-weight: 900; }
+    #col-filter-dropdown {
+      position: fixed; z-index: 9999; display: none;
+      background: #1a1d27; border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px;
+      min-width: 220px; max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.65);
+    }
+    .cfd-search {
+      width: 100%; padding: 6px 10px; background: #12151f;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 12px; outline: none;
+      margin-bottom: 6px; box-sizing: border-box;
+    }
+    .cfd-search:focus { border-color: var(--accent); }
+    .cfd-list { max-height: 220px; overflow-y: auto; margin-bottom: 8px; }
+    .cfd-item {
+      display: flex; align-items: center; gap: 7px; padding: 4px 6px;
+      cursor: pointer; border-radius: 5px; font-size: 12px;
+      color: var(--text); user-select: none;
+    }
+    .cfd-item:hover { background: var(--row-hover); }
+    .cfd-item input[type=checkbox] { cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+    .cfd-sep { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+    .cfd-footer {
+      display: flex; gap: 8px; justify-content: flex-end;
+      padding-top: 8px; border-top: 1px solid var(--border);
+    }
+    .cfd-btn {
+      padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: #12151f; color: var(--muted); font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .cfd-btn:hover { color: var(--text); border-color: var(--muted); }
+    .cfd-btn-ok { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .cfd-btn-ok:hover { opacity: .85; }
   </style>
 </head>
 <body>
@@ -287,8 +336,6 @@
       <button class="filter-btn active" data-filter="ALL"    onclick="setFilter('ALL')">All</button>
       <button class="filter-btn f-match"  data-filter="MATCH"  onclick="setFilter('MATCH')">✓ Match</button>
       <button class="filter-btn f-diff"   data-filter="DIFF"   onclick="setFilter('DIFF')">⚠ Diff</button>
-      <button class="filter-btn f-only-a" data-filter="ONLY_A" onclick="setFilter('ONLY_A')">▶ Only BASE</button>
-      <button class="filter-btn f-only-b" data-filter="ONLY_B" onclick="setFilter('ONLY_B')">▶ Only NEW</button>
     </div>
 
     <!-- Table -->
@@ -298,14 +345,15 @@
           <thead>
             <tr>
               <th>#</th>
-              <th>DATAPOINTER NAME</th>
-              <th class="a-col">IDENT (BASE)</th>
-              <th class="a-col">LENGTH (BASE)</th>
-              <th class="a-col">FORMAT (BASE)</th>
-              <th class="b-col">IDENT (NEW)</th>
-              <th class="b-col">LENGTH (NEW)</th>
-              <th class="b-col">FORMAT (NEW)</th>
-              <th>STATUS</th>
+              <th>STATUS          <button class="col-filter-btn" data-field="status"  onclick="openColFilter('status',this);event.stopPropagation()">▾</button></th>
+              <th>DATAPOINTER NAME <button class="col-filter-btn" data-field="name"     onclick="openColFilter('name',this);event.stopPropagation()">▾</button></th>
+              <th>DATA SIZE  <button class="col-filter-btn" data-field="aLen"   onclick="openColFilter('aLen',this);event.stopPropagation()">▾</button></th>
+              <th class="a-col">INIT DATA (BASE) <button class="col-filter-btn" data-field="aOrg"    onclick="openColFilter('aOrg',this);event.stopPropagation()">▾</button></th>
+              <th class="b-col">INIT DATA (NEW)  <button class="col-filter-btn" data-field="bOrg"    onclick="openColFilter('bOrg',this);event.stopPropagation()">▾</button></th>
+              <th class="a-col">USE CASES (BASE) <button class="col-filter-btn" data-field="aSess"   onclick="openColFilter('aSess',this);event.stopPropagation()">▾</button></th>
+              <th class="b-col">USE CASES (NEW)  <button class="col-filter-btn" data-field="bSess"   onclick="openColFilter('bSess',this);event.stopPropagation()">▾</button></th>
+              <th>COMPONENT <button class="col-filter-btn" data-field="aComp"  onclick="openColFilter('aComp',this);event.stopPropagation()">▾</button></th>
+              <th>IDENT     <button class="col-filter-btn" data-field="aIdent" onclick="openColFilter('aIdent',this);event.stopPropagation()">▾</button></th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -323,7 +371,7 @@
 
 <script>
   // ── State ────────────────────────────────────────────────────────────────
-  const state = { A: null, B: null, nameA: '', nameB: '', rows: [], filter: 'ALL' };
+  const state = { A: null, B: null, nameA: '', nameB: '', rows: [], filter: 'ALL', colFilters: {} };
 
   // ── File loading ─────────────────────────────────────────────────────────
   function loadFile(evt, side) {
@@ -385,8 +433,90 @@
       const ident  = (dp.querySelector('DATAPOINTER-IDENT')       || {}).textContent || '';
       const length = (dp.querySelector('LENGTH')                  || {}).textContent || '';
       const fmt    = (dp.querySelector('DATAFORMAT-IDENTIFIER')   || {}).textContent || '';
-      if (name.trim()) result[name.trim()] = { ident: ident.trim(), length: length.trim(), fmt: fmt.trim() };
+      if (name.trim()) result[name.trim()] = { ident: ident.trim(), length: length.trim(), fmt: fmt.trim(), comp: '', orgData: '', sessions: '' };
     }
+
+    // Extract Component from {NAME}__Metadata DATABLOCKs
+    const allDatablocks = doc.querySelectorAll('DATABLOCK');
+    for (const db of allDatablocks) {
+      const dbNameEl = db.querySelector('DATABLOCK-NAME');
+      if (!dbNameEl) continue;
+      const dbName = dbNameEl.textContent.trim();
+
+      // Component from __Metadata
+      if (dbName.endsWith('__Metadata')) {
+        const baseName = dbName.slice(0, -'__Metadata'.length);
+        if (baseName in result) {
+          for (const dataEl of db.querySelectorAll('DATA')) {
+            const text = dataEl.textContent || '';
+            if (text.startsWith('description=')) {
+              const m = text.match(/- Component:\s*([^\n]+)/);
+              if (m) {
+                result[baseName].comp = m[1].trim();
+                // Propagate to variant entries: baseName[OEM_PN328], baseName[OES_PN464], etc.
+                const prefix = baseName + '[';
+                for (const key of Object.keys(result)) {
+                  if (key.startsWith(prefix)) result[key].comp = m[1].trim();
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      // Original hex data from __Org (eeprom_data_original) — one <DATA> per byte
+      if (dbName.endsWith('__Org')) {
+        // Use direct children only to avoid matching nested elements
+        let cls = '';
+        for (const child of db.children) {
+          if (child.tagName === 'DATABLOCK-CLASS') { cls = child.textContent.trim(); break; }
+        }
+        if (cls === 'eeprom_data_original') {
+          const baseName = dbName.slice(0, -'__Org'.length);
+          if (baseName in result) {
+            const bytes = [];
+            for (const child of db.children) {
+              if (child.tagName === 'DATA') {
+                const v = child.textContent.trim();
+                if (v) bytes.push(v);
+              }
+            }
+            result[baseName].orgData = bytes.join(' ');
+          }
+        }
+      }
+    }
+
+    // Extract session memberships (all sessions except __ALL__ and __VARIANTHANDLING__)
+    const sessMap = {};
+    for (const s of doc.querySelectorAll('SESSION')) {
+      const snEl = s.querySelector('SESSION-NAME');
+      if (!snEl) continue;
+      const sname = snEl.textContent.trim();
+      if (sname === '__ALL__' || sname === '__VARIANTHANDLING__' || sname === '__FAILURE_MEMORY__') continue;
+      // For all sessions, prefer the COMMENT as the human-readable display label
+      const SESSION_LABELS = {
+        'Delivery State':          'DS',
+        'Reset To Delivery State': 'RTDS',
+      };
+      let displayName = sname;
+      const commentEl = s.querySelector('COMMENT');
+      if (commentEl && commentEl.textContent.trim()) {
+        const comment = commentEl.textContent.trim();
+        displayName = SESSION_LABELS[comment] ?? comment;
+      }
+      for (const dp of s.querySelectorAll('DATAPOINTER')) {
+        const n = ((dp.querySelector('DATAPOINTER-NAME') || {}).textContent || '').trim();
+        if (!(n in result)) continue;
+        if (!sessMap[n]) sessMap[n] = [];
+        if (!sessMap[n].includes(displayName)) sessMap[n].push(displayName);
+      }
+    }
+    for (const key of Object.keys(result)) {
+      result[key].sessions = sessMap[key] ? sessMap[key].join(', ') : '';
+    }
+
     return result;
   }
 
@@ -402,27 +532,32 @@
         const inA = name in a, inB = name in b;
         if (inA && inB) {
           const diffs = [];
-          if (a[name].ident  !== b[name].ident)  diffs.push('IDENT');
-          if (a[name].length !== b[name].length)  diffs.push('LENGTH');
-          if (a[name].fmt    !== b[name].fmt)     diffs.push('FORMAT');
+          if (a[name].orgData  !== b[name].orgData)  diffs.push('INIT DATA');
+          if (a[name].sessions !== b[name].sessions) diffs.push('USE CASES');
           rows.push({
             name, inA: true, inB: true,
-            aIdent: a[name].ident, aLen: a[name].length, aFmt: a[name].fmt,
-            bIdent: b[name].ident, bLen: b[name].length, bFmt: b[name].fmt,
+            aIdent: a[name].ident,    aLen: a[name].length, aFmt: a[name].fmt, aComp: a[name].comp,
+            bIdent: b[name].ident,    bLen: b[name].length, bFmt: b[name].fmt, bComp: b[name].comp,
+            aOrg:   a[name].orgData,  bOrg:  b[name].orgData,
+            aSess:  a[name].sessions, bSess: b[name].sessions,
             status: diffs.length ? 'DIFF' : 'MATCH', diffs
           });
         } else if (inA) {
           rows.push({
             name, inA: true, inB: false,
-            aIdent: a[name].ident, aLen: a[name].length, aFmt: a[name].fmt,
-            bIdent: '', bLen: '', bFmt: '',
+            aIdent: a[name].ident, aLen: a[name].length, aFmt: a[name].fmt, aComp: a[name].comp,
+            bIdent: '', bLen: '', bFmt: '', bComp: '',
+            aOrg: a[name].orgData, bOrg: '',
+            aSess: a[name].sessions, bSess: '',
             status: 'ONLY_A', diffs: []
           });
         } else {
           rows.push({
             name, inA: false, inB: true,
-            aIdent: '', aLen: '', aFmt: '',
-            bIdent: b[name].ident, bLen: b[name].length, bFmt: b[name].fmt,
+            aIdent: '', aLen: '', aFmt: '', aComp: '',
+            bIdent: b[name].ident, bLen: b[name].length, bFmt: b[name].fmt, bComp: b[name].comp,
+            aOrg: '', bOrg: b[name].orgData,
+            aSess: '', bSess: b[name].sessions,
             status: 'ONLY_B', diffs: []
           });
         }
@@ -454,14 +589,30 @@
   }
 
   // ── Render table ─────────────────────────────────────────────────────────
+  // Truncate hex string for display: show max N bytes, add … if longer
+  function orgDisplay(hex, isDiff) {
+    if (!hex) return '<span class="missing">—</span>';
+    const bytes = hex.split(' ');
+    const MAX = 16;
+    const display = bytes.length > MAX
+      ? bytes.slice(0, MAX).join(' ') + ' … (' + bytes.length + ' bytes)'
+      : hex;
+    const cls   = isDiff ? ' class="changed"' : '';
+    const title = bytes.length > MAX ? ` title="${hex}"` : ` title="${hex}"`;
+    return `<span${cls}${title}>${display}</span>`;
+  }
+
   function renderTable() {
     const search = document.getElementById('search').value.toLowerCase();
     const filter = state.filter;
 
     const filtered = state.rows.filter(r => {
-      const statusMatch = filter === 'ALL' || r.status === filter;
-      const nameMatch   = !search || r.name.toLowerCase().includes(search);
-      return statusMatch && nameMatch;
+      if (filter !== 'ALL' && r.status !== filter) return false;
+      if (search && !r.name.toLowerCase().includes(search)) return false;
+      for (const [field, allowed] of Object.entries(state.colFilters)) {
+        if (!allowed.has(getFieldVal(r, field))) return false;
+      }
+      return true;
     });
 
     const tbody = document.getElementById('tbody');
@@ -472,20 +623,15 @@
       const tr = document.createElement('tr');
       if (r.status === 'DIFF') tr.classList.add('highlight');
 
-      const diffI = r.diffs.includes('IDENT');
-      const diffL = r.diffs.includes('LENGTH');
-      const diffF = r.diffs.includes('FORMAT');
+      const diffO = r.diffs.includes('INIT DATA');
+      const diffS = r.diffs.includes('USE CASES');
 
       const statusHTML = (() => {
         if (r.status === 'MATCH')  return `<span class="badge-status s-match">✓ MATCH</span>`;
         if (r.status === 'ONLY_A') return `<span class="badge-status s-only-a">▶ ONLY IN BASE</span>`;
         if (r.status === 'ONLY_B') return `<span class="badge-status s-only-b">▶ ONLY IN NEW</span>`;
         if (r.status === 'DIFF') {
-          const detail = r.diffs.map(d => {
-            if (d === 'IDENT')  return `IDENT: ${r.aIdent}→${r.bIdent}`;
-            if (d === 'LENGTH') return `LENGTH: ${r.aLen}→${r.bLen}`;
-            if (d === 'FORMAT') return `FORMAT: ${r.aFmt}→${r.bFmt}`;
-          }).join(' | ');
+          const detail = r.diffs.join(' | ');
           return `<span class="badge-status s-diff">⚠ DIFF</span><div class="s-diff-detail">${detail}</div>`;
         }
       })();
@@ -495,14 +641,15 @@
 
       tr.innerHTML = `
         <td style="color:var(--muted);font-size:11px">${idx}</td>
-        <td class="col-name">${highlight(r.name, search)}</td>
-        <td class="col-ident">${mayDiff(r.aIdent, diffI && r.inA && r.inB)}</td>
-        <td class="col-len">${mayDiff(r.aLen, diffL && r.inA && r.inB)}</td>
-        <td class="col-fmt">${mayDiff(r.aFmt, diffF && r.inA && r.inB)}</td>
-        <td class="col-ident">${mayDiff(r.bIdent, diffI && r.inA && r.inB)}</td>
-        <td class="col-len">${mayDiff(r.bLen, diffL && r.inA && r.inB)}</td>
-        <td class="col-fmt">${mayDiff(r.bFmt, diffF && r.inA && r.inB)}</td>
         <td>${statusHTML}</td>
+        <td class="col-name">${highlight(r.name, search)}</td>
+        <td class="col-len">${missing(r.aLen)}</td>
+        <td class="col-org" title="${r.aOrg}">${orgDisplay(r.aOrg, diffO && r.inA && r.inB)}</td>
+        <td class="col-org" title="${r.bOrg}">${orgDisplay(r.bOrg, diffO && r.inA && r.inB)}</td>
+        <td class="col-sessions">${mayDiff(r.aSess, diffS && r.inA && r.inB)}</td>
+        <td class="col-sessions">${mayDiff(r.bSess, diffS && r.inA && r.inB)}</td>
+        <td class="col-comp">${missing(r.aComp)}</td>
+        <td class="col-ident">${missing(r.aIdent)}</td>
       `;
       tbody.appendChild(tr);
     }
@@ -528,22 +675,142 @@
     renderTable();
   }
 
+  // ── Column filter dropdown ─────────────────────────────────────────────
+  let cfdField = null;
+
+  function getFieldVal(r, field) {
+    const map = {
+      name: r.name, aComp: r.aComp,
+      aIdent: r.aIdent, aLen: r.aLen,
+      aOrg: r.aOrg, bOrg: r.bOrg,
+      aSess: r.aSess, bSess: r.bSess,
+      status: r.status
+    };
+    return map[field] !== undefined ? (map[field] || '') : '';
+  }
+
+  function openColFilter(field, btnEl) {
+    const dd = document.getElementById('col-filter-dropdown');
+    if (cfdField === field && dd.style.display === 'block') { cfdCancel(); return; }
+    cfdField = field;
+
+    const vals = [...new Set(state.rows.map(r => getFieldVal(r, field)))].sort((a, b) => {
+      const na = parseFloat(a), nb = parseFloat(b);
+      return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b);
+    });
+    const active = state.colFilters[field];
+    const listEl = document.getElementById('cfd-list');
+    listEl.innerHTML = '';
+
+    const allLbl = document.createElement('label');
+    allLbl.className = 'cfd-item cfd-all';
+    allLbl.innerHTML = `<input type="checkbox" id="cfd-chk-all" ${!active ? 'checked' : ''} onchange="cfdToggleAll(this)"><span style="font-weight:600">(Select All)</span>`;
+    listEl.appendChild(allLbl);
+    const sep = document.createElement('hr'); sep.className = 'cfd-sep';
+    listEl.appendChild(sep);
+
+    for (const val of vals) {
+      const checked = !active || active.has(val);
+      const lbl = document.createElement('label');
+      lbl.className = 'cfd-item';
+      lbl.innerHTML = `<input type="checkbox" value="${val.replace(/"/g,'&quot;')}" ${checked ? 'checked' : ''} onchange="cfdSyncAll()"><span>${val || '<em style="color:var(--muted)">(empty)</em>'}</span>`;
+      listEl.appendChild(lbl);
+    }
+
+    const rect = btnEl.getBoundingClientRect();
+    dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 240)) + 'px';
+    dd.style.top  = (rect.bottom + 4) + 'px';
+    dd.style.display = 'block';
+    const si = document.getElementById('cfd-search');
+    si.value = ''; cfdSearch('');
+    setTimeout(() => si.focus(), 20);
+  }
+
+  function cfdSearch(term) {
+    const t = term.toLowerCase();
+    document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all)').forEach(el => {
+      el.style.display = el.querySelector('span').textContent.toLowerCase().includes(t) ? '' : 'none';
+    });
+    cfdSyncAll();
+  }
+
+  function cfdToggleAll(cb) {
+    document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all)').forEach(el => {
+      if (el.style.display !== 'none') el.querySelector('input').checked = cb.checked;
+    });
+  }
+
+  function cfdSyncAll() {
+    const vis = [...document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all)')].filter(el => el.style.display !== 'none');
+    const ca = document.getElementById('cfd-chk-all');
+    if (ca) ca.checked = vis.length > 0 && vis.every(el => el.querySelector('input').checked);
+  }
+
+  function cfdApply() {
+    if (!cfdField) return;
+    const all     = [...document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all) input')];
+    const checked = all.filter(i => i.checked).map(i => i.value);
+    if (checked.length >= all.length) delete state.colFilters[cfdField];
+    else state.colFilters[cfdField] = new Set(checked);
+    document.getElementById('col-filter-dropdown').style.display = 'none';
+    cfdField = null;
+    renderTable();
+    updateColFilterBtnStates();
+  }
+
+  function cfdClear() {
+    if (!cfdField) return;
+    delete state.colFilters[cfdField];
+    document.getElementById('col-filter-dropdown').style.display = 'none';
+    cfdField = null;
+    renderTable();
+    updateColFilterBtnStates();
+  }
+
+  function cfdCancel() {
+    document.getElementById('col-filter-dropdown').style.display = 'none';
+    cfdField = null;
+  }
+
+  function updateColFilterBtnStates() {
+    document.querySelectorAll('.col-filter-btn[data-field]').forEach(btn => {
+      const on = !!state.colFilters[btn.dataset.field];
+      btn.classList.toggle('active', on);
+      btn.textContent = on ? '▼' : '▾';
+    });
+  }
+
+  document.addEventListener('mousedown', e => {
+    const dd = document.getElementById('col-filter-dropdown');
+    if (dd && dd.style.display === 'block' && !dd.contains(e.target) && !e.target.classList.contains('col-filter-btn'))
+      cfdApply();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cfdCancel();
+  });
+
   // ── Export CSV ───────────────────────────────────────────────────────────
   function exportCSV() {
     const na = state.nameA.replace('.CNT','').replace('.cnt','');
     const nb = state.nameB.replace('.CNT','').replace('.cnt','');
     const headers = [
       'DATAPOINTER-NAME',
-      `IDENT (${na})`, `LENGTH (${na})`, `FORMAT (${na})`,
-      `IDENT (${nb})`, `LENGTH (${nb})`, `FORMAT (${nb})`,
+      'DATA SIZE',
+      `INIT DATA (${na})`, `INIT DATA (${nb})`,
+      `USE CASES (${na})`, `USE CASES (${nb})`,
+      'COMPONENT', 'IDENT',
       'STATUS', 'DIFF FIELDS'
     ];
     const csvRows = [headers.join(',')];
     for (const r of state.rows) {
       const row = [
         `"${r.name}"`,
-        r.aIdent, r.aLen, `"${r.aFmt}"`,
-        r.bIdent, r.bLen, `"${r.bFmt}"`,
+        r.aLen,
+        `"${r.aOrg}"`,  `"${r.bOrg}"`,
+        `"${r.aSess}"`, `"${r.bSess}"`,
+        `"${r.aComp}"`,
+        r.aIdent,
         r.status, `"${r.diffs.join(' | ')}"`
       ];
       csvRows.push(row.join(','));
@@ -557,13 +824,12 @@
 
   // ── Reset ────────────────────────────────────────────────────────────────
   function reset() {
-    state.A = null; state.B = null; state.rows = []; state.nameA = ''; state.nameB = '';
+    state.A = null; state.B = null; state.rows = []; state.nameA = ''; state.nameB = ''; state.colFilters = {};
     ['A','B'].forEach(s => {
       document.getElementById('name'+s).textContent = 'Drop or click to select .CNT file';
       document.getElementById('hint'+s).textContent = s === 'A' ? 'Base / Reference file' : 'New / Updated file';
       document.getElementById('badge'+s).style.display = 'none';
       document.getElementById('drop'+s).classList.remove('loaded');
-      // reset file input
       const inp = document.querySelector('#drop'+s+' input[type=file]');
       inp.value = '';
     });
@@ -574,7 +840,20 @@
     document.getElementById('tbody').innerHTML = '';
     document.getElementById('rowCount').style.display = 'none';
     document.getElementById('search').value = '';
+    cfdCancel();
+    updateColFilterBtnStates();
   }
 </script>
+
+<!-- Column filter dropdown (fixed overlay) -->
+<div id="col-filter-dropdown" onclick="event.stopPropagation()">
+  <input type="text" id="cfd-search" class="cfd-search" placeholder="🔍 Search values…" oninput="cfdSearch(this.value)" />
+  <div id="cfd-list" class="cfd-list"></div>
+  <div class="cfd-footer">
+    <button class="cfd-btn" onclick="cfdClear()">Clear Filter</button>
+    <button class="cfd-btn cfd-btn-ok" onclick="cfdApply()">OK</button>
+  </div>
+</div>
+
 </body>
 </html>

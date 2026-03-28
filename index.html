@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CNT File Comparator</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --border: #2e3247;
+      --accent: #4f8ef7;
+      --accent2: #6c63ff;
+      --text: #e2e8f0;
+      --muted: #8892a4;
+      --match: #22c55e;
+      --diff: #f59e0b;
+      --only-a: #3b82f6;
+      --only-b: #a855f7;
+      --danger: #ef4444;
+      --row-hover: #222639;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: linear-gradient(135deg, #1a1d27 0%, #12151f 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    header .logo {
+      width: 40px; height: 40px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 900; color: #fff;
+      flex-shrink: 0;
+    }
+    header h1 { font-size: 20px; font-weight: 700; }
+    header span { font-size: 13px; color: var(--muted); margin-left: 4px; }
+
+    /* ── Main layout ── */
+    main { padding: 32px 40px; max-width: 1600px; margin: 0 auto; }
+
+    /* ── Upload cards ── */
+    .upload-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 24px;
+    }
+    .upload-card {
+      background: var(--card);
+      border: 2px dashed var(--border);
+      border-radius: 14px;
+      padding: 28px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      position: relative;
+    }
+    .upload-card:hover, .upload-card.drag-over {
+      border-color: var(--accent);
+      background: #1e2235;
+    }
+    .upload-card.loaded {
+      border-color: var(--match);
+      border-style: solid;
+    }
+    .upload-card input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-card .icon { font-size: 36px; margin-bottom: 10px; }
+    .upload-card .label {
+      font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted); margin-bottom: 6px;
+    }
+    .upload-card .filename {
+      font-size: 14px; font-weight: 600; color: var(--accent);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .upload-card .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .upload-card .badge {
+      display: inline-block; margin-top: 8px;
+      background: #1e3a2f; color: var(--match);
+      border: 1px solid #2d5c48;
+      border-radius: 20px; padding: 2px 12px; font-size: 12px; font-weight: 600;
+    }
+    .file-a .label { color: #60a5fa; }
+    .file-b .label { color: #c084fc; }
+    .file-a.loaded { border-color: #60a5fa; }
+    .file-b.loaded { border-color: #c084fc; }
+
+    /* ── Action bar ── */
+    .action-bar {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 28px;
+    }
+    .btn {
+      padding: 10px 24px; border-radius: 8px; border: none;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .15s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff; min-width: 140px;
+    }
+    .btn-secondary {
+      background: var(--card); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-export {
+      background: #14532d; color: #4ade80;
+      border: 1px solid #166534; margin-left: auto;
+    }
+    #loading { display: none; font-size: 13px; color: var(--muted); }
+
+    /* ── Summary cards ── */
+    .summary { display: none; }
+    .summary-cards {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 18px;
+    }
+    .stat-card .val {
+      font-size: 28px; font-weight: 800; line-height: 1;
+    }
+    .stat-card .key { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .06em; }
+    .stat-total .val  { color: var(--text); }
+    .stat-match .val  { color: var(--match); }
+    .stat-diff  .val  { color: var(--diff); }
+    .stat-only-a .val { color: var(--only-a); }
+    .stat-only-b .val { color: var(--only-b); }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
+    }
+    .filter-bar input[type=text] {
+      flex: 1; min-width: 220px; padding: 8px 14px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 13px;
+      outline: none;
+    }
+    .filter-bar input[type=text]:focus { border-color: var(--accent); }
+    .filter-btn {
+      padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--card); color: var(--muted); font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all .15s;
+    }
+    .filter-btn.active { background: #1e2235; color: var(--text); border-color: var(--accent); }
+    .filter-btn.f-match.active  { background: #0d2a1a; color: var(--match);  border-color: var(--match); }
+    .filter-btn.f-diff.active   { background: #2a1f0d; color: var(--diff);   border-color: var(--diff); }
+    .filter-btn.f-only-a.active { background: #0d1f3a; color: var(--only-a); border-color: var(--only-a); }
+    .filter-btn.f-only-b.active { background: #1e0d3a; color: var(--only-b); border-color: var(--only-b); }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden;
+    }
+    .table-scroll { overflow-x: auto; max-height: 60vh; overflow-y: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: #12151f; padding: 11px 14px; text-align: left;
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .07em; color: var(--muted); white-space: nowrap;
+      position: sticky; top: 0; z-index: 2;
+      border-bottom: 1px solid var(--border);
+    }
+    thead th.a-col { color: #60a5fa; }
+    thead th.b-col { color: #c084fc; }
+    tbody tr { border-bottom: 1px solid #1e2133; transition: background .1s; }
+    tbody tr:hover { background: var(--row-hover); }
+    tbody td { padding: 9px 14px; vertical-align: middle; }
+    .col-name { font-weight: 600; font-family: 'Consolas', monospace; font-size: 12px; }
+    .col-comp     { font-size: 12px; color: #a5b4fc; white-space: nowrap; }
+    .col-sessions { font-size: 11px; color: #67e8f9; max-width: 200px; }
+    .col-org      { font-family: monospace; font-size: 11px; color: #fbbf24; white-space: nowrap;
+                     max-width: 200px; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+    .col-ident { font-family: monospace; color: var(--muted); }
+    .col-len   { font-family: monospace; }
+    .col-fmt   { font-family: monospace; font-size: 11px; color: #94a3b8; }
+    .highlight { background: rgba(245,158,11,.12); }
+
+    /* status badges */
+    .badge-status {
+      display: inline-block; padding: 2px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; white-space: nowrap;
+    }
+    .s-match  { background: #0d2a1a; color: var(--match);  border: 1px solid #166534; }
+    .s-diff   { background: #2a1f0d; color: var(--diff);   border: 1px solid #92400e; }
+    .s-only-a { background: #0d1f3a; color: var(--only-a); border: 1px solid #1e40af; }
+    .s-only-b { background: #1e0d3a; color: var(--only-b); border: 1px solid #7e22ce; }
+    .s-diff-detail { font-size: 10px; color: var(--diff); margin-top: 3px; }
+
+    .missing { color: #3a3f55; font-style: italic; }
+    .changed { color: var(--diff); font-weight: 700; }
+
+    /* row count */
+    .row-count { font-size: 12px; color: var(--muted); padding: 8px 14px; border-top: 1px solid var(--border); }
+
+    /* empty state */
+    #empty-state {
+      text-align: center; padding: 60px 20px; color: var(--muted);
+      display: block;
+    }
+    #empty-state .big { font-size: 48px; margin-bottom: 12px; }
+    #empty-state p { font-size: 14px; }
+
+    /* ── Column filter dropdown ── */
+    .col-filter-btn {
+      background: none; border: none; color: var(--muted);
+      cursor: pointer; font-size: 11px; padding: 0 3px;
+      border-radius: 3px; margin-left: 3px; line-height: 1;
+      vertical-align: middle; transition: color .15s, background .15s;
+    }
+    .col-filter-btn:hover { color: var(--accent); background: rgba(79,142,247,.12); }
+    .col-filter-btn.active { color: var(--accent); font-weight: 900; }
+    #col-filter-dropdown {
+      position: fixed; z-index: 9999; display: none;
+      background: #1a1d27; border: 1px solid var(--border);
+      border-radius: 10px; padding: 10px;
+      min-width: 220px; max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.65);
+    }
+    .cfd-search {
+      width: 100%; padding: 6px 10px; background: #12151f;
+      border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: 12px; outline: none;
+      margin-bottom: 6px; box-sizing: border-box;
+    }
+    .cfd-search:focus { border-color: var(--accent); }
+    .cfd-list { max-height: 220px; overflow-y: auto; margin-bottom: 8px; }
+    .cfd-item {
+      display: flex; align-items: center; gap: 7px; padding: 4px 6px;
+      cursor: pointer; border-radius: 5px; font-size: 12px;
+      color: var(--text); user-select: none;
+    }
+    .cfd-item:hover { background: var(--row-hover); }
+    .cfd-item input[type=checkbox] { cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+    .cfd-sep { border: none; border-top: 1px solid var(--border); margin: 4px 0; }
+    .cfd-footer {
+      display: flex; gap: 8px; justify-content: flex-end;
+      padding-top: 8px; border-top: 1px solid var(--border);
+    }
+    .cfd-btn {
+      padding: 5px 14px; border-radius: 6px; border: 1px solid var(--border);
+      background: #12151f; color: var(--muted); font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .cfd-btn:hover { color: var(--text); border-color: var(--muted); }
+    .cfd-btn-ok { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .cfd-btn-ok:hover { opacity: .85; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">⇄</div>
+  <div>
+    <h1>CNT File Comparator <span>EEPROM / DATAPOINTER</span></h1>
+  </div>
+</header>
+
+<main>
+
+  <!-- Upload -->
+  <div class="upload-row">
+    <div class="upload-card file-a" id="dropA" ondragover="onDragOver(event,'A')" ondragleave="onDragLeave('A')" ondrop="onDrop(event,'A')">
+      <input type="file" accept=".cnt,.CNT,.xml" onchange="loadFile(event,'A')" />
+      <div class="icon">📄</div>
+      <div class="label">BASE CNT</div>
+      <div class="filename" id="nameA">Drop or click to select .CNT file</div>
+      <div class="hint" id="hintA">Base / Reference file</div>
+      <div id="badgeA" style="display:none" class="badge">✓ Loaded</div>
+    </div>
+
+    <div class="upload-card file-b" id="dropB" ondragover="onDragOver(event,'B')" ondragleave="onDragLeave('B')" ondrop="onDrop(event,'B')">
+      <input type="file" accept=".cnt,.CNT,.xml" onchange="loadFile(event,'B')" />
+      <div class="icon">📄</div>
+      <div class="label">NEW CNT</div>
+      <div class="filename" id="nameB">Drop or click to select .CNT file</div>
+      <div class="hint" id="hintB">New / Updated file</div>
+      <div id="badgeB" style="display:none" class="badge">✓ Loaded</div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="action-bar">
+    <button class="btn btn-primary" id="btnCompare" onclick="runCompare()" disabled>⇄ Compare</button>
+    <button class="btn btn-secondary" onclick="reset()">✕ Reset</button>
+    <span id="loading">⏳ Parsing files…</span>
+    <button class="btn btn-export" id="btnExport" onclick="exportCSV()" style="display:none">⬇ Export CSV</button>
+  </div>
+
+  <!-- Summary -->
+  <div class="summary" id="summary">
+    <div class="summary-cards">
+      <div class="stat-card stat-total">
+        <div class="val" id="sTotal">0</div>
+        <div class="key">Total Entries</div>
+      </div>
+      <div class="stat-card stat-match">
+        <div class="val" id="sMatch">0</div>
+        <div class="key">Identical</div>
+      </div>
+      <div class="stat-card stat-diff">
+        <div class="val" id="sDiff">0</div>
+        <div class="key">Different</div>
+      </div>
+      <div class="stat-card stat-only-a">
+        <div class="val" id="sOnlyA">0</div>
+        <div class="key">Only in BASE</div>
+      </div>
+      <div class="stat-card stat-only-b">
+        <div class="val" id="sOnlyB">0</div>
+        <div class="key">Only in NEW</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <input type="text" id="search" placeholder="🔍  Search by name…" oninput="renderTable()" />
+      <button class="filter-btn active" data-filter="ALL"    onclick="setFilter('ALL')">All</button>
+      <button class="filter-btn f-match"  data-filter="MATCH"  onclick="setFilter('MATCH')">✓ Match</button>
+      <button class="filter-btn f-diff"   data-filter="DIFF"   onclick="setFilter('DIFF')">⚠ Diff</button>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>STATUS          <button class="col-filter-btn" data-field="status"  onclick="openColFilter('status',this);event.stopPropagation()">▾</button></th>
+              <th>DATAPOINTER NAME <button class="col-filter-btn" data-field="name"     onclick="openColFilter('name',this);event.stopPropagation()">▾</button></th>
+              <th>DATA SIZE  <button class="col-filter-btn" data-field="aLen"   onclick="openColFilter('aLen',this);event.stopPropagation()">▾</button></th>
+              <th class="a-col">INIT DATA (BASE) <button class="col-filter-btn" data-field="aOrg"    onclick="openColFilter('aOrg',this);event.stopPropagation()">▾</button></th>
+              <th class="b-col">INIT DATA (NEW)  <button class="col-filter-btn" data-field="bOrg"    onclick="openColFilter('bOrg',this);event.stopPropagation()">▾</button></th>
+              <th class="a-col">USE CASES (BASE) <button class="col-filter-btn" data-field="aSess"   onclick="openColFilter('aSess',this);event.stopPropagation()">▾</button></th>
+              <th class="b-col">USE CASES (NEW)  <button class="col-filter-btn" data-field="bSess"   onclick="openColFilter('bSess',this);event.stopPropagation()">▾</button></th>
+              <th>COMPONENT <button class="col-filter-btn" data-field="aComp"  onclick="openColFilter('aComp',this);event.stopPropagation()">▾</button></th>
+              <th>IDENT     <button class="col-filter-btn" data-field="aIdent" onclick="openColFilter('aIdent',this);event.stopPropagation()">▾</button></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        <div id="empty-state">
+          <div class="big">📂</div>
+          <p>Load two .CNT files and click <strong>Compare</strong> to see results.</p>
+        </div>
+      </div>
+      <div class="row-count" id="rowCount" style="display:none"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────────────
+  const state = { A: null, B: null, nameA: '', nameB: '', rows: [], filter: 'ALL', colFilters: {} };
+
+  // ── File loading ─────────────────────────────────────────────────────────
+  function loadFile(evt, side) {
+    const file = evt.target.files[0];
+    if (!file) return;
+    readFile(file, side);
+  }
+  function onDragOver(evt, side) {
+    evt.preventDefault();
+    document.getElementById('drop' + side).classList.add('drag-over');
+  }
+  function onDragLeave(side) {
+    document.getElementById('drop' + side).classList.remove('drag-over');
+  }
+  function onDrop(evt, side) {
+    evt.preventDefault();
+    document.getElementById('drop' + side).classList.remove('drag-over');
+    const file = evt.dataTransfer.files[0];
+    if (file) readFile(file, side);
+  }
+  function readFile(file, side) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const text = e.target.result;
+      const parsed = parseCNT(text);
+      state[side] = parsed;
+      state['name' + side] = file.name;
+
+      document.getElementById('name' + side).textContent = file.name;
+      document.getElementById('hint' + side).textContent = Object.keys(parsed).length + ' DATAPOINTERs loaded';
+      document.getElementById('badge' + side).style.display = 'inline-block';
+      document.getElementById('drop' + side).classList.add('loaded');
+
+      if (state.A && state.B) document.getElementById('btnCompare').disabled = false;
+    };
+    reader.readAsText(file);
+  }
+
+  // ── XML Parser ───────────────────────────────────────────────────────────
+  function parseCNT(xmlText) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlText, 'application/xml');
+    const result = {};
+
+    // find __ALL__ session
+    const sessions = doc.querySelectorAll('SESSION');
+    let targetSession = null;
+    for (const s of sessions) {
+      const nameEl = s.querySelector('SESSION-NAME');
+      if (nameEl && nameEl.textContent.trim() === '__ALL__') {
+        targetSession = s; break;
+      }
+    }
+    // fallback: use all datapointers
+    const container = targetSession || doc;
+    const dps = container.querySelectorAll('DATAPOINTER');
+    for (const dp of dps) {
+      const name   = (dp.querySelector('DATAPOINTER-NAME')        || {}).textContent || '';
+      const ident  = (dp.querySelector('DATAPOINTER-IDENT')       || {}).textContent || '';
+      const length = (dp.querySelector('LENGTH')                  || {}).textContent || '';
+      const fmt    = (dp.querySelector('DATAFORMAT-IDENTIFIER')   || {}).textContent || '';
+      if (name.trim()) result[name.trim()] = { ident: ident.trim(), length: length.trim(), fmt: fmt.trim(), comp: '', orgData: '', sessions: '' };
+    }
+
+    // Extract Component from {NAME}__Metadata DATABLOCKs
+    const allDatablocks = doc.querySelectorAll('DATABLOCK');
+    for (const db of allDatablocks) {
+      const dbNameEl = db.querySelector('DATABLOCK-NAME');
+      if (!dbNameEl) continue;
+      const dbName = dbNameEl.textContent.trim();
+
+      // Component from __Metadata
+      if (dbName.endsWith('__Metadata')) {
+        const baseName = dbName.slice(0, -'__Metadata'.length);
+        if (baseName in result) {
+          for (const dataEl of db.querySelectorAll('DATA')) {
+            const text = dataEl.textContent || '';
+            if (text.startsWith('description=')) {
+              const m = text.match(/- Component:\s*([^\n]+)/);
+              if (m) {
+                result[baseName].comp = m[1].trim();
+                // Propagate to variant entries: baseName[OEM_PN328], baseName[OES_PN464], etc.
+                const prefix = baseName + '[';
+                for (const key of Object.keys(result)) {
+                  if (key.startsWith(prefix)) result[key].comp = m[1].trim();
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+
+      // Original hex data from __Org (eeprom_data_original) — one <DATA> per byte
+      if (dbName.endsWith('__Org')) {
+        // Use direct children only to avoid matching nested elements
+        let cls = '';
+        for (const child of db.children) {
+          if (child.tagName === 'DATABLOCK-CLASS') { cls = child.textContent.trim(); break; }
+        }
+        if (cls === 'eeprom_data_original') {
+          const baseName = dbName.slice(0, -'__Org'.length);
+          if (baseName in result) {
+            const bytes = [];
+            for (const child of db.children) {
+              if (child.tagName === 'DATA') {
+                const v = child.textContent.trim();
+                if (v) bytes.push(v);
+              }
+            }
+            result[baseName].orgData = bytes.join(' ');
+          }
+        }
+      }
+    }
+
+    // Extract session memberships (all sessions except __ALL__ and __VARIANTHANDLING__)
+    const sessMap = {};
+    for (const s of doc.querySelectorAll('SESSION')) {
+      const snEl = s.querySelector('SESSION-NAME');
+      if (!snEl) continue;
+      const sname = snEl.textContent.trim();
+      if (sname === '__ALL__' || sname === '__VARIANTHANDLING__' || sname === '__FAILURE_MEMORY__') continue;
+      // For all sessions, prefer the COMMENT as the human-readable display label
+      const SESSION_LABELS = {
+        'Delivery State':          'DS',
+        'Reset To Delivery State': 'RTDS',
+      };
+      let displayName = sname;
+      const commentEl = s.querySelector('COMMENT');
+      if (commentEl && commentEl.textContent.trim()) {
+        const comment = commentEl.textContent.trim();
+        displayName = SESSION_LABELS[comment] ?? comment;
+      }
+      for (const dp of s.querySelectorAll('DATAPOINTER')) {
+        const n = ((dp.querySelector('DATAPOINTER-NAME') || {}).textContent || '').trim();
+        if (!(n in result)) continue;
+        if (!sessMap[n]) sessMap[n] = [];
+        if (!sessMap[n].includes(displayName)) sessMap[n].push(displayName);
+      }
+    }
+    for (const key of Object.keys(result)) {
+      result[key].sessions = sessMap[key] ? sessMap[key].join(', ') : '';
+    }
+
+    return result;
+  }
+
+  // ── Compare ──────────────────────────────────────────────────────────────
+  function runCompare() {
+    document.getElementById('loading').style.display = 'inline';
+    setTimeout(() => {
+      const a = state.A, b = state.B;
+      const allKeys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
+      const rows = [];
+
+      for (const name of allKeys) {
+        const inA = name in a, inB = name in b;
+        if (inA && inB) {
+          const diffs = [];
+          if (a[name].orgData  !== b[name].orgData)  diffs.push('INIT DATA');
+          if (a[name].sessions !== b[name].sessions) diffs.push('USE CASES');
+          rows.push({
+            name, inA: true, inB: true,
+            aIdent: a[name].ident,    aLen: a[name].length, aFmt: a[name].fmt, aComp: a[name].comp,
+            bIdent: b[name].ident,    bLen: b[name].length, bFmt: b[name].fmt, bComp: b[name].comp,
+            aOrg:   a[name].orgData,  bOrg:  b[name].orgData,
+            aSess:  a[name].sessions, bSess: b[name].sessions,
+            status: diffs.length ? 'DIFF' : 'MATCH', diffs
+          });
+        } else if (inA) {
+          rows.push({
+            name, inA: true, inB: false,
+            aIdent: a[name].ident, aLen: a[name].length, aFmt: a[name].fmt, aComp: a[name].comp,
+            bIdent: '', bLen: '', bFmt: '', bComp: '',
+            aOrg: a[name].orgData, bOrg: '',
+            aSess: a[name].sessions, bSess: '',
+            status: 'ONLY_A', diffs: []
+          });
+        } else {
+          rows.push({
+            name, inA: false, inB: true,
+            aIdent: '', aLen: '', aFmt: '', aComp: '',
+            bIdent: b[name].ident, bLen: b[name].length, bFmt: b[name].fmt, bComp: b[name].comp,
+            aOrg: '', bOrg: b[name].orgData,
+            aSess: '', bSess: b[name].sessions,
+            status: 'ONLY_B', diffs: []
+          });
+        }
+      }
+
+      state.rows = rows;
+      document.getElementById('loading').style.display = 'none';
+
+      // summary
+      const total  = rows.length;
+      const match  = rows.filter(r => r.status === 'MATCH').length;
+      const diff   = rows.filter(r => r.status === 'DIFF').length;
+      const onlyA  = rows.filter(r => r.status === 'ONLY_A').length;
+      const onlyB  = rows.filter(r => r.status === 'ONLY_B').length;
+      document.getElementById('sTotal').textContent = total;
+      document.getElementById('sMatch').textContent = match;
+      document.getElementById('sDiff').textContent  = diff;
+      document.getElementById('sOnlyA').textContent = onlyA;
+      document.getElementById('sOnlyB').textContent = onlyB;
+      document.getElementById('summary').style.display = 'block';
+      document.getElementById('btnExport').style.display = 'inline-block';
+      document.getElementById('empty-state').style.display = 'none';
+
+      state.filter = 'ALL';
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector('[data-filter="ALL"]').classList.add('active');
+      renderTable();
+    }, 50);
+  }
+
+  // ── Render table ─────────────────────────────────────────────────────────
+  // Truncate hex string for display: show max N bytes, add … if longer
+  function orgDisplay(hex, isDiff) {
+    if (!hex) return '<span class="missing">—</span>';
+    const bytes = hex.split(' ');
+    const MAX = 16;
+    const display = bytes.length > MAX
+      ? bytes.slice(0, MAX).join(' ') + ' … (' + bytes.length + ' bytes)'
+      : hex;
+    const cls   = isDiff ? ' class="changed"' : '';
+    const title = bytes.length > MAX ? ` title="${hex}"` : ` title="${hex}"`;
+    return `<span${cls}${title}>${display}</span>`;
+  }
+
+  function renderTable() {
+    const search = document.getElementById('search').value.toLowerCase();
+    const filter = state.filter;
+
+    const filtered = state.rows.filter(r => {
+      if (filter !== 'ALL' && r.status !== filter) return false;
+      if (search && !r.name.toLowerCase().includes(search)) return false;
+      for (const [field, allowed] of Object.entries(state.colFilters)) {
+        if (!allowed.has(getFieldVal(r, field))) return false;
+      }
+      return true;
+    });
+
+    const tbody = document.getElementById('tbody');
+    tbody.innerHTML = '';
+    let idx = 0;
+    for (const r of filtered) {
+      idx++;
+      const tr = document.createElement('tr');
+      if (r.status === 'DIFF') tr.classList.add('highlight');
+
+      const diffO = r.diffs.includes('INIT DATA');
+      const diffS = r.diffs.includes('USE CASES');
+
+      const statusHTML = (() => {
+        if (r.status === 'MATCH')  return `<span class="badge-status s-match">✓ MATCH</span>`;
+        if (r.status === 'ONLY_A') return `<span class="badge-status s-only-a">▶ ONLY IN BASE</span>`;
+        if (r.status === 'ONLY_B') return `<span class="badge-status s-only-b">▶ ONLY IN NEW</span>`;
+        if (r.status === 'DIFF') {
+          const detail = r.diffs.join(' | ');
+          return `<span class="badge-status s-diff">⚠ DIFF</span><div class="s-diff-detail">${detail}</div>`;
+        }
+      })();
+
+      const missing = (v) => v ? v : '<span class="missing">—</span>';
+      const mayDiff = (v, isDiff) => isDiff && v ? `<span class="changed">${v}</span>` : missing(v);
+
+      tr.innerHTML = `
+        <td style="color:var(--muted);font-size:11px">${idx}</td>
+        <td>${statusHTML}</td>
+        <td class="col-name">${highlight(r.name, search)}</td>
+        <td class="col-len">${missing(r.aLen)}</td>
+        <td class="col-org" title="${r.aOrg}">${orgDisplay(r.aOrg, diffO && r.inA && r.inB)}</td>
+        <td class="col-org" title="${r.bOrg}">${orgDisplay(r.bOrg, diffO && r.inA && r.inB)}</td>
+        <td class="col-sessions">${mayDiff(r.aSess, diffS && r.inA && r.inB)}</td>
+        <td class="col-sessions">${mayDiff(r.bSess, diffS && r.inA && r.inB)}</td>
+        <td class="col-comp">${missing(r.aComp)}</td>
+        <td class="col-ident">${missing(r.aIdent)}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    const rc = document.getElementById('rowCount');
+    rc.style.display = 'block';
+    rc.textContent = `Showing ${filtered.length} of ${state.rows.length} entries`;
+  }
+
+  function highlight(text, search) {
+    if (!search) return text;
+    const idx = text.toLowerCase().indexOf(search);
+    if (idx < 0) return text;
+    return text.slice(0, idx) +
+      `<mark style="background:#3b4a2a;color:#a3e635;border-radius:2px">${text.slice(idx, idx + search.length)}</mark>` +
+      text.slice(idx + search.length);
+  }
+
+  function setFilter(f) {
+    state.filter = f;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`[data-filter="${f}"]`).classList.add('active');
+    renderTable();
+  }
+
+  // ── Column filter dropdown ─────────────────────────────────────────────
+  let cfdField = null;
+
+  function getFieldVal(r, field) {
+    const map = {
+      name: r.name, aComp: r.aComp,
+      aIdent: r.aIdent, aLen: r.aLen,
+      aOrg: r.aOrg, bOrg: r.bOrg,
+      aSess: r.aSess, bSess: r.bSess,
+      status: r.status
+    };
+    return map[field] !== undefined ? (map[field] || '') : '';
+  }
+
+  function openColFilter(field, btnEl) {
+    const dd = document.getElementById('col-filter-dropdown');
+    if (cfdField === field && dd.style.display === 'block') { cfdCancel(); return; }
+    cfdField = field;
+
+    const vals = [...new Set(state.rows.map(r => getFieldVal(r, field)))].sort((a, b) => {
+      const na = parseFloat(a), nb = parseFloat(b);
+      return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b);
+    });
+    const active = state.colFilters[field];
+    const listEl = document.getElementById('cfd-list');
+    listEl.innerHTML = '';
+
+    const allLbl = document.createElement('label');
+    allLbl.className = 'cfd-item cfd-all';
+    allLbl.innerHTML = `<input type="checkbox" id="cfd-chk-all" ${!active ? 'checked' : ''} onchange="cfdToggleAll(this)"><span style="font-weight:600">(Select All)</span>`;
+    listEl.appendChild(allLbl);
+    const sep = document.createElement('hr'); sep.className = 'cfd-sep';
+    listEl.appendChild(sep);
+
+    for (const val of vals) {
+      const checked = !active || active.has(val);
+      const lbl = document.createElement('label');
+      lbl.className = 'cfd-item';
+      lbl.innerHTML = `<input type="checkbox" value="${val.replace(/"/g,'&quot;')}" ${checked ? 'checked' : ''} onchange="cfdSyncAll()"><span>${val || '<em style="color:var(--muted)">(empty)</em>'}</span>`;
+      listEl.appendChild(lbl);
+    }
+
+    const rect = btnEl.getBoundingClientRect();
+    dd.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 240)) + 'px';
+    dd.style.top  = (rect.bottom + 4) + 'px';
+    dd.style.display = 'block';
+    const si = document.getElementById('cfd-search');
+    si.value = ''; cfdSearch('');
+    setTimeout(() => si.focus(), 20);
+  }
+
+  function cfdSearch(term) {
+    const t = term.toLowerCase();
+    document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all)').forEach(el => {
+      el.style.display = el.querySelector('span').textContent.toLowerCase().includes(t) ? '' : 'none';
+    });
+    cfdSyncAll();
+  }
+
+  function cfdToggleAll(cb) {
+    document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all)').forEach(el => {
+      if (el.style.display !== 'none') el.querySelector('input').checked = cb.checked;
+    });
+  }
+
+  function cfdSyncAll() {
+    const vis = [...document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all)')].filter(el => el.style.display !== 'none');
+    const ca = document.getElementById('cfd-chk-all');
+    if (ca) ca.checked = vis.length > 0 && vis.every(el => el.querySelector('input').checked);
+  }
+
+  function cfdApply() {
+    if (!cfdField) return;
+    const all     = [...document.querySelectorAll('#cfd-list .cfd-item:not(.cfd-all) input')];
+    const checked = all.filter(i => i.checked).map(i => i.value);
+    if (checked.length >= all.length) delete state.colFilters[cfdField];
+    else state.colFilters[cfdField] = new Set(checked);
+    document.getElementById('col-filter-dropdown').style.display = 'none';
+    cfdField = null;
+    renderTable();
+    updateColFilterBtnStates();
+  }
+
+  function cfdClear() {
+    if (!cfdField) return;
+    delete state.colFilters[cfdField];
+    document.getElementById('col-filter-dropdown').style.display = 'none';
+    cfdField = null;
+    renderTable();
+    updateColFilterBtnStates();
+  }
+
+  function cfdCancel() {
+    document.getElementById('col-filter-dropdown').style.display = 'none';
+    cfdField = null;
+  }
+
+  function updateColFilterBtnStates() {
+    document.querySelectorAll('.col-filter-btn[data-field]').forEach(btn => {
+      const on = !!state.colFilters[btn.dataset.field];
+      btn.classList.toggle('active', on);
+      btn.textContent = on ? '▼' : '▾';
+    });
+  }
+
+  document.addEventListener('mousedown', e => {
+    const dd = document.getElementById('col-filter-dropdown');
+    if (dd && dd.style.display === 'block' && !dd.contains(e.target) && !e.target.classList.contains('col-filter-btn'))
+      cfdApply();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cfdCancel();
+  });
+
+  // ── Export CSV ───────────────────────────────────────────────────────────
+  function exportCSV() {
+    const na = state.nameA.replace('.CNT','').replace('.cnt','');
+    const nb = state.nameB.replace('.CNT','').replace('.cnt','');
+    const headers = [
+      'DATAPOINTER-NAME',
+      'DATA SIZE',
+      `INIT DATA (${na})`, `INIT DATA (${nb})`,
+      `USE CASES (${na})`, `USE CASES (${nb})`,
+      'COMPONENT', 'IDENT',
+      'STATUS', 'DIFF FIELDS'
+    ];
+    const csvRows = [headers.join(',')];
+    for (const r of state.rows) {
+      const row = [
+        `"${r.name}"`,
+        r.aLen,
+        `"${r.aOrg}"`,  `"${r.bOrg}"`,
+        `"${r.aSess}"`, `"${r.bSess}"`,
+        `"${r.aComp}"`,
+        r.aIdent,
+        r.status, `"${r.diffs.join(' | ')}"`
+      ];
+      csvRows.push(row.join(','));
+    }
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `CNT_Compare_${na}_vs_${nb}.csv`;
+    a.click();
+  }
+
+  // ── Reset ────────────────────────────────────────────────────────────────
+  function reset() {
+    state.A = null; state.B = null; state.rows = []; state.nameA = ''; state.nameB = ''; state.colFilters = {};
+    ['A','B'].forEach(s => {
+      document.getElementById('name'+s).textContent = 'Drop or click to select .CNT file';
+      document.getElementById('hint'+s).textContent = s === 'A' ? 'Base / Reference file' : 'New / Updated file';
+      document.getElementById('badge'+s).style.display = 'none';
+      document.getElementById('drop'+s).classList.remove('loaded');
+      const inp = document.querySelector('#drop'+s+' input[type=file]');
+      inp.value = '';
+    });
+    document.getElementById('btnCompare').disabled = true;
+    document.getElementById('btnExport').style.display = 'none';
+    document.getElementById('summary').style.display = 'none';
+    document.getElementById('empty-state').style.display = 'block';
+    document.getElementById('tbody').innerHTML = '';
+    document.getElementById('rowCount').style.display = 'none';
+    document.getElementById('search').value = '';
+    cfdCancel();
+    updateColFilterBtnStates();
+  }
+</script>
+
+<!-- Column filter dropdown (fixed overlay) -->
+<div id="col-filter-dropdown" onclick="event.stopPropagation()">
+  <input type="text" id="cfd-search" class="cfd-search" placeholder="🔍 Search values…" oninput="cfdSearch(this.value)" />
+  <div id="cfd-list" class="cfd-list"></div>
+  <div class="cfd-footer">
+    <button class="cfd-btn" onclick="cfdClear()">Clear Filter</button>
+    <button class="cfd-btn cfd-btn-ok" onclick="cfdApply()">OK</button>
+  </div>
+</div>
+
+</body>
+</html>
